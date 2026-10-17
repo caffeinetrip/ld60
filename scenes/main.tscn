@@ -9,16 +9,22 @@
 [ext_resource type="Script" uid="uid://bt627wdcopl67" path="res://scripts/ui/night_panel.gd" id="7_night"]
 [ext_resource type="Script" uid="uid://daw2vf7k1oid8" path="res://scripts/minigames/minigames.gd" id="7_tipki"]
 
+[ext_resource type="Script" path="res://scripts/day/customers.gd" id="8_customers"]
+
 [node name="Main" type="Node2D" unique_id=2002761438]
 script = ExtResource("1_main")
 
 [node name="Cafe" parent="." unique_id=1247189548 instance=ExtResource("2_cafe")]
+
+[node name="Customers" type="Node2D" parent="."]
+script = ExtResource("8_customers")
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=186031243]
 position = Vector2(160, 90)
 
 [node name="Day" type="Node" parent="." unique_id=957767133]
 script = ExtResource("3_day")
+customers_path = NodePath("../Customers")
 minigames_path = NodePath("../UI/MiniGames")
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=1232725627]

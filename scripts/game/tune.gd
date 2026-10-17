@@ -36,6 +36,13 @@ const MAX_DAY := 30.0
 const NOBODY_GIVES_UP := 5.0
 const SPECIAL_GAME := &"hit_bar"
 
+# customers
+const CAT_SPEED := 30.0 # walking pixels per second
+const CAT_OUTSIDE_WEIGHT := 0.4 # leave directly after buying
+const CAT_WANDER_WEIGHT := 0.3 # wander instead of taking a seat
+const CAT_WANDER_TIME := Vector2(3.0, 6.0) # seconds wandering
+const CAT_SEAT_TIME := Vector2(4.0, 8.0) # seconds sitting
+
 # boss
 const BOSS_HP := 100
 const BOSS_DAMAGE := 35.0		# per perfect hit

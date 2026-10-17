@@ -8,6 +8,7 @@ extends Node2D
 
 
 func _ready() -> void:
+	$Customers.setup(_cafe)
 	_day.finished.connect(_on_day_finished)
 	_night.done.connect(_start_day)
 	_cafe.set_entrance_open(false)
