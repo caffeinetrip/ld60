@@ -2,3 +2,27 @@
 .godot/
 /android/
 /build/
+
+# art, sounds, references and docs stay local
+*.md
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.wav
+*.ogg
+*.mp3
+*.ttf
+*.otf
+*.png.import
+*.jpg.import
+*.jpeg.import
+*.wav.import
+*.ogg.import
+*.mp3.import
+*.ttf.import
+*.otf.import
+/ui ref/
+/art/fonts/
