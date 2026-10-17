@@ -31,10 +31,10 @@ func _ready() -> void:
 	theme = Theme.new()
 	for type in ["Button", "OptionButton"]:
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			var box: StyleBox = ThemeDB.get_default_theme().get_stylebox(state, type).duplicate()
-			box.content_margin_top = 0
-			box.content_margin_bottom = 0
-			theme.set_stylebox(state, type, box)
+			var style: StyleBox = ThemeDB.get_default_theme().get_stylebox(state, type).duplicate()
+			style.content_margin_top = 0
+			style.content_margin_bottom = 0
+			theme.set_stylebox(state, type, style)
 	theme.set_constant("line_spacing", "Label", -5)
 	theme.set_constant("separation", "VBoxContainer", 0)
 	theme.set_constant("separation", "HBoxContainer", 2)
@@ -70,17 +70,10 @@ func _ready() -> void:
 	row.add_child(_glass)
 	prep.add_child(_info)
 
-	var inv := _page("Inventory")
-	var view_path := "res://scenes/ui/backpack_view.tscn"
-	if Game.backpack and ResourceLoader.exists(view_path):
-		var view: Control = load(view_path).instantiate()
-		inv.add_child(view)
-		view.bind(Game.backpack)
-	else:
-		_label(inv, "No relics yet")
+	_page("Inventory").add_child(BackpackView.new())
 
 	var up := _page("Upgrade")
-	for id in Game.UPGRADES:
+	for id in Tune.UPGRADES:
 		row = _row(up)
 		var label := _label(row)
 		label.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -154,8 +147,8 @@ func _refresh() -> void:
 		if r.complaints.is_empty() and r.sold > 0:
 			lines.append("Everyone loved it!")
 	if _rescued:
-		lines.append("The guide left supplies for %d drinks." % Game.RESCUE)
-	lines.append("Week $%d / $%d" % [Game.week_earned(), Game.QUOTA])
+		lines.append("The guide left supplies for %d drinks." % Tune.RESCUE)
+	lines.append("Week $%d / $%d" % [Game.week_earned(), Tune.QUOTA])
 	_report.text = "\n".join(lines)
 
 	for kind in Ingredients.KINDS:
@@ -180,11 +173,11 @@ func _refresh() -> void:
 		Game.cost_per_drink(), Game.price - Game.cost_per_drink()]
 	if _rescued:
 		_info.text += "
-The guide left supplies for %d drinks." % Game.RESCUE
+The guide left supplies for %d drinks." % Tune.RESCUE
 	_next.disabled = Game.drinks_possible() == 0
 
 	for id in _upgrades:
-		var def: Dictionary = Game.UPGRADES[id]
+		var def: Dictionary = Tune.UPGRADES[id]
 		var c := Game.upgrade_cost(id)
 		_upgrades[id][0].text = "%s %d/%d\n%s" % [def.name, Game.level(id), def.costs.size(), def.desc]
 		_upgrades[id][1].text = "$%d" % c if c >= 0 else "MAX"

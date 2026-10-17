@@ -8,7 +8,7 @@ const F := Ingredients.Kind.FLAVOR
 var main: Node
 var day: Node
 var night: Control
-var bar: HitBar
+var games: MiniGames
 var auto_hit := false
 
 
@@ -30,12 +30,13 @@ func _open() -> void:
 	tree.current_scene = main
 	day = main.get_node("Day")
 	night = main.get_node("UI/NightPanel")
-	bar = main.get_node("UI/HitBar")
+	games = main.get_node("UI/MiniGames")
 
 
 ## Plays every hit bar like a pro.
 func _auto_hit() -> void:
-	if auto_hit and bar and bar._running and absf(bar._x - HitBar.BAR.size.x * 0.5) <= 3.0:
+	var bar: HitBar = games.current as HitBar if games else null
+	if auto_hit and bar and bar.running and absf(bar._x - HitBar.BAR.size.x * 0.5) <= 3.0:
 		click(Vector2(160, 88))
 
 
@@ -144,7 +145,7 @@ func test_broke_buy_asks_then_guide_helps() -> void:
 	buttons[0].pressed.emit()
 	check(Game.is_unlocked(&"grapefruit"), "bought")
 	eq(Game.money, 0, "all spent")
-	eq(Game.drinks_possible(), Game.RESCUE, "the guide brought drinks")
+	eq(Game.drinks_possible(), Tune.RESCUE, "the guide brought drinks")
 	check(not night._next.disabled, "can open")
 	check(night._info.text.contains("guide"), "says so")
 

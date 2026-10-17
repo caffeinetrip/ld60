@@ -1,42 +1,30 @@
 extends Node
 ## Run state and the economy rules. Pure model: no nodes, no timers. The day
 ## controller asks it what happens, the night panel buys through it.
+## Numbers live in Tune, content in Ingredients / Relics / Tune.UPGRADES.
 ##
 ## The bar sells one drink a day: one picked ingredient per kind (alcohol, mixer,
 ## flavor) and a recipe in units per glass. Stock is counted in units; "restock for N"
 ## buys what N drinks need. Every set of ingredients has one right recipe, the same
-## every day, like in a real bar (doses in Ingredients) — the closer the drink, the
+## every day, like in a real bar (doses in Ingredients) - the closer the drink, the
 ## bigger the tip and the better tomorrow's reputation.
-## Pricier ingredients cost more but cats accept a higher price (Ingredients `value`).
+##
+## Mods: everything that changes a number (upgrades, relics, later events) is a source
+## of {key: value} in set_mods(); mod(key) is the sum over sources, 0.1 = +10 %.
+## Keys: price_mult tip_mult demand_mult fair_mult discount capacity storage
+## serve_speed hit_slow hit_zone loot_luck special_mult
 
 signal money_changed(money: int)
 signal stock_changed
 signal week_changed(earned: int)
 signal day_started(day: int)
 signal day_ended(report: Dictionary)
-signal bonuses_changed
+signal mods_changed
 signal relic_won(id: StringName)
 
-const WEEK := 7
-const QUOTA := 1500
-const START_MONEY := 120
-const GLASS_COST := 1
-const BASE_CAPACITY := 5		# units in one glass
-const BASE_STORAGE := 25		# max glasses
-const TIP_MAX := 0.5			# perfect drink tips half the price
-const PENALTY_PER_UNIT := 0.25	# each unit off the ideal costs this much score
-const RESCUE := 5				# drinks the guide brings when the bar is broke
-const NEED_WORD := ["a kick", "something to mix", "some flavor"]
-
-const UPGRADES := {
-	&"storage": {name = "Bigger Shelf", desc = "+5 glasses of storage", costs = [80, 160, 320]},
-	&"capacity": {name = "Tall Glasses", desc = "+1 unit per glass", costs = [120, 260]},
-	&"service": {name = "Quick Hands", desc = "Serve 20% faster", costs = [60, 140, 300]},
-}
-
-var money := START_MONEY
+var money := 0
 var day := 1
-var price := 10
+var price := 0
 var glasses := 0
 var stock := {}				# ingredient id -> units
 var unlocked := {}				# ingredient id -> true
@@ -44,14 +32,15 @@ var selected := {}				# Kind -> ingredient id on sale
 var recipe := {}				# Kind -> units per glass
 var earnings: Array[int] = []	# revenue of every finished day
 var upgrades := {}				# upgrade id -> level
-var bonuses := {}				# from relics
-var reputation := 0.5			# blended average score, 0..1
-var backpack = null				# Backpack, created once scripts/relics exists
+var mods := {}					# key -> summed value
+var reputation := 0.0			# blended average score, 0..1
+var backpack := Backpack.new()
 var director: Director
 
 var today := {}
 var last_report := {}
 
+var _sources := {}				# source -> {key: value}
 var _left := 0					# drinks left to sell today
 var _open := false				# a day is running
 var _taste := {}				# today's drink vs ideal, same for every glass
@@ -59,53 +48,62 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	backpack.changed.connect(func(): set_mods(&"relics", backpack.stats()))
 	new_run()
 
 
 func new_run() -> void:
-	money = START_MONEY
+	money = Tune.START_MONEY
 	day = 1
-	price = 10
+	price = Tune.START_PRICE
+	reputation = Tune.START_REPUTATION
 	stock.clear()
 	unlocked.clear()
+	selected.clear()
+	recipe.clear()
 	for id in Ingredients.ids():
-		stock[id] = 0
+		stock[id] = Tune.START_STOCK.get(id, 0)
 		if Ingredients.DEFS[id].unlock == 0:
 			unlocked[id] = true
-	selected = {
-		Ingredients.Kind.ALCOHOL: &"brandy",
-		Ingredients.Kind.MIXER: &"ginger_ale",
-		Ingredients.Kind.FLAVOR: &"cinnamon",
-	}
+	for kind in Ingredients.KINDS:
+		selected[kind] = Tune.START_SELECTED[kind]
+		recipe[kind] = Tune.START_RECIPE[kind]
+	glasses = Tune.START_GLASSES
 	earnings.clear()
 	upgrades.clear()
-	bonuses.clear()
-	reputation = 0.5
+	_sources.clear()
+	mods.clear()
+	backpack.clear()
 	last_report = {}
 	_left = 0
 	_open = false
 	director = Director.new()
-	var bp_path := "res://scripts/relics/backpack.gd"
-	backpack = load(bp_path).new() if ResourceLoader.exists(bp_path) else null
-	if backpack:
-		backpack.changed.connect(func(): set_bonuses(backpack.stats()))
-	# starter kit from the guide, so day 1 opens with cats instead of a shop:
-	# right but plain, the cats ask for flavor
-	recipe = {Ingredients.Kind.ALCOHOL: 1, Ingredients.Kind.MIXER: 2, Ingredients.Kind.FLAVOR: 0}
-	glasses = 8
-	stock[&"brandy"] = 8
-	stock[&"ginger_ale"] = 16
 	_reset_today()
+
+
+# --- mods --------------------------------------------------------------------
+
+func mod(key: StringName) -> float:
+	return mods.get(key, 0.0)
+
+
+func set_mods(source: StringName, values: Dictionary) -> void:
+	_sources[source] = values
+	mods.clear()
+	for s in _sources.values():
+		for key in s:
+			mods[key] = mods.get(key, 0.0) + s[key]
+	mods_changed.emit()
 
 
 # --- night: the shop ---------------------------------------------------------
 
 func storage() -> int:
-	return BASE_STORAGE + 5 * level(&"storage")
+	return Tune.BASE_STORAGE + int(mod(&"storage"))
 
 
 func capacity() -> int:
-	return BASE_CAPACITY + level(&"capacity") + int(bonus(&"capacity"))
+	return Tune.BASE_CAPACITY + int(mod(&"capacity"))
 
 
 func is_unlocked(id: StringName) -> bool:
@@ -154,7 +152,7 @@ func set_recipe(kind: Ingredients.Kind, units: int) -> bool:
 
 
 func unit_cost(id: StringName) -> int:
-	return maxi(1, roundi(Ingredients.cost(id) * (1.0 - bonus(&"discount"))))
+	return maxi(1, roundi(Ingredients.cost(id) * (1.0 - mod(&"discount"))))
 
 
 ## How many drinks the current stock makes with the current recipe.
@@ -168,7 +166,7 @@ func drinks_possible() -> int:
 
 ## Price of topping the stock up to `drinks` drinks.
 func restock_cost(drinks: int) -> int:
-	var total := maxi(0, drinks - glasses) * GLASS_COST
+	var total := maxi(0, drinks - glasses) * Tune.GLASS_COST
 	for kind in recipe:
 		var id: StringName = selected[kind]
 		total += maxi(0, drinks * recipe[kind] - stock[id]) * unit_cost(id)
@@ -189,7 +187,7 @@ func restock(drinks: int) -> bool:
 func rescue() -> bool:
 	if drinks_possible() > 0 or restock_cost(1) <= money:
 		return false
-	_fill(RESCUE)
+	_fill(Tune.RESCUE)
 	return true
 
 
@@ -213,7 +211,7 @@ func max_restock() -> int:
 
 
 func cost_per_drink() -> int:
-	var total := GLASS_COST
+	var total := Tune.GLASS_COST
 	for kind in recipe:
 		total += recipe[kind] * unit_cost(selected[kind])
 	return total
@@ -224,7 +222,7 @@ func level(upgrade: StringName) -> int:
 
 
 func upgrade_cost(upgrade: StringName) -> int:
-	var costs: Array = UPGRADES[upgrade].costs
+	var costs: Array = Tune.UPGRADES[upgrade].costs
 	var lv := level(upgrade)
 	return costs[lv] if lv < costs.size() else -1
 
@@ -235,19 +233,14 @@ func buy_upgrade(upgrade: StringName) -> bool:
 		return false
 	_spend(c)
 	upgrades[upgrade] = level(upgrade) + 1
+	var sum := {}
+	for id in upgrades:
+		var per: Dictionary = Tune.UPGRADES[id].mods
+		for key in per:
+			sum[key] = sum.get(key, 0.0) + per[key] * upgrades[id]
+	set_mods(&"upgrades", sum)
 	stock_changed.emit()
 	return true
-
-
-# --- relics ------------------------------------------------------------------
-
-func bonus(key: StringName) -> float:
-	return bonuses.get(key, 0.0)
-
-
-func set_bonuses(b: Dictionary) -> void:
-	bonuses = b
-	bonuses_changed.emit()
 
 
 # --- day ---------------------------------------------------------------------
@@ -266,17 +259,17 @@ func fair_price() -> float:
 	for kind in recipe:
 		if recipe[kind] > 0:
 			v += Ingredients.DEFS[selected[kind]].value
-	return v * (0.85 + 0.3 * reputation) * (1.0 + bonus(&"fair_mult"))
+	return v * (Tune.FAIR_BASE + Tune.FAIR_REP * reputation) * (1.0 + mod(&"fair_mult"))
 
 
 ## 1 = full flow of cats, 0 = nobody comes. Cheaper than fair doesn't add more.
 func demand() -> float:
 	var ratio := price / maxf(fair_price(), 1.0)
-	return clampf((1.6 - ratio) / 0.6, 0.0, 1.0) * (1.0 + bonus(&"demand_mult"))
+	return clampf((Tune.DEMAND_ZERO - ratio) / (Tune.DEMAND_ZERO - 1.0), 0.0, 1.0) * (1.0 + mod(&"demand_mult"))
 
 
 func serve_time() -> float:
-	return 0.8 * pow(0.8, level(&"service"))
+	return Tune.SERVE_TIME / (1.0 + mod(&"serve_speed"))
 
 
 func drinks_left() -> int:
@@ -312,11 +305,11 @@ func taste() -> Dictionary:
 	elif worst < 0 and recipe[worst_kind] > 0:
 		line = "More %s, please." % what
 	elif worst < 0:
-		line = "Needs %s..." % NEED_WORD[worst_kind]
-	return {score = clampf(1.0 - penalty * PENALTY_PER_UNIT, 0.0, 1.0), line = line}
+		line = "Needs %s..." % Ingredients.KIND_NEED[worst_kind]
+	return {score = clampf(1.0 - penalty * Tune.PENALTY_PER_UNIT, 0.0, 1.0), line = line}
 
 
-## Sells the next drink. quality < 1 comes from the hit bar; 0 = spilled, no money.
+## Sells the next drink. quality < 1 comes from a minigame; 0 = spilled, no money.
 ## Returns {money, score, line}.
 func sell_next(quality := 1.0) -> Dictionary:
 	if _left <= 0:
@@ -331,25 +324,21 @@ func sell_next(quality := 1.0) -> Dictionary:
 		today.spilled += 1
 		return {money = 0, score = 0.0, line = ""}
 
-	var paid := roundi(price * (1.0 + bonus(&"price_mult")))
-	var tip := roundi(price * TIP_MAX * _taste.score * quality * (1.0 + bonus(&"tip_mult")))
-	var earned := paid + tip
-	_spend(-earned)
+	var paid := roundi(price * (1.0 + mod(&"price_mult")))
+	var tip := roundi(price * Tune.TIP_MAX * _taste.score * quality * (1.0 + mod(&"tip_mult")))
+	_earn(paid + tip)
 	today.sold += 1
-	today.revenue += earned
 	today.tips += tip
 	today.score_sum += _taste.score
 	if _taste.line != "":
 		today.complaints[_taste.line] = today.complaints.get(_taste.line, 0) + 1
-	week_changed.emit(week_earned())
-	return {money = earned, score = _taste.score, line = _taste.line}
+	return {money = paid + tip, score = _taste.score, line = _taste.line}
 
 
 func end_day(reason: StringName) -> Dictionary:
 	today.ended_by = reason
 	if today.sold > 0:
-		# half memory, so one bad day doesn't empty the bar
-		reputation = lerpf(reputation, today.score_sum / today.sold, 0.5)
+		reputation = lerpf(reputation, today.score_sum / today.sold, Tune.REP_MEMORY)
 	earnings.append(today.revenue)
 	_left = 0
 	_open = false
@@ -364,53 +353,56 @@ func end_day(reason: StringName) -> Dictionary:
 ## Revenue of the last 7 days: while a day runs, today and the 6 before it.
 func week_earned() -> int:
 	var sum: int = today.get("revenue", 0)
-	var days := WEEK - 1 if _open else WEEK
+	var days := Tune.WEEK - 1 if _open else Tune.WEEK
 	for i in range(maxi(0, earnings.size() - days), earnings.size()):
 		sum += earnings[i]
 	return sum
 
 
 func quota_progress() -> float:
-	return clampf(float(week_earned()) / QUOTA, 0.0, 1.0)
+	return clampf(float(week_earned()) / Tune.QUOTA, 0.0, 1.0)
 
 
-## 0..1, grows with how strong the player is. Drives hit bar speed and loot.
+## 0..1, grows with how strong the player is. Drives minigame difficulty and loot.
 func difficulty() -> float:
 	return quota_progress()
 
 
-func hit_params() -> Dictionary:
-	var d := difficulty()
-	var zone := 1.0 + bonus(&"hit_zone")
-	return {
-		speed = lerpf(120.0, 240.0, d) * maxf(0.3, 1.0 - bonus(&"hit_slow")),
-		good_zone = minf(lerpf(0.40, 0.22, d) * zone, 0.9),
-		perfect_zone = minf(lerpf(0.12, 0.05, d) * zone, 0.5),
-		flip = _rng.randf() < 0.3 * d,
-	}
-
-
-## Relic for a hit bar result, or &"" when the tier earns nothing.
-## Until the relic code lands the roll still happens, it just returns the rarity.
+## Relic for a minigame tier, or &"" when the tier earns nothing. Lands in the pocket.
 func grant_relic(tier: StringName) -> StringName:
-	var luck := 0.3 * difficulty() + bonus(&"loot_luck")
-	var rarity := &""
-	match tier:
-		&"perfect":
-			rarity = &"epic" if _rng.randf() < 0.15 + luck else &"rare"
-		&"good":
-			rarity = &"rare" if _rng.randf() < 0.25 + luck else &"common"
-		_:
-			return &""
-	var defs_path := "res://scripts/relics/relic_defs.gd"
-	if not ResourceLoader.exists(defs_path):
-		relic_won.emit(rarity)
-		return rarity
-	var id: StringName = load(defs_path).roll(rarity, _rng)
-	if backpack:
-		backpack.add_to_pocket(id)
+	if not Tune.LOOT.has(tier):
+		return &""
+	var roll: Array = Tune.LOOT[tier]
+	var luck := Tune.LOOT_LUCK * difficulty() + mod(&"loot_luck")
+	var rarity: StringName = roll[1] if _rng.randf() < roll[2] + luck else roll[0]
+	var id := Relics.roll(rarity, _rng)
+	backpack.add_to_pocket(id)
 	relic_won.emit(id)
 	return id
+
+
+## What reacts to `event` (&"serve", &"day_start"...): the `proc` of every placed relic
+## and every ingredient on sale. A proc is {event, chance, game, reward}, see Relics.
+func procs(event: StringName) -> Array[Dictionary]:
+	var defs: Array[Dictionary] = []
+	for id in backpack.placed():
+		defs.append(Relics.get_def(id))
+	for kind in selected:
+		defs.append(Ingredients.DEFS[selected[kind]])
+	var out: Array[Dictionary] = []
+	for def in defs:
+		var p: Dictionary = def.get("proc", {})
+		if p.get("event") == event:
+			out.append(p)
+	return out
+
+
+## Pays a proc reward scaled by how well its minigame went. Returns the money.
+func reward(what: Dictionary, quality := 1.0) -> int:
+	var cash := roundi(what.get("money", 0) * quality)
+	if cash > 0:
+		_earn(cash)
+	return cash
 
 
 # --- internals ---------------------------------------------------------------
@@ -418,6 +410,12 @@ func grant_relic(tier: StringName) -> StringName:
 func _spend(amount: int) -> void:
 	money -= amount
 	money_changed.emit(money)
+
+
+func _earn(amount: int) -> void:
+	_spend(-amount)
+	today.revenue += amount
+	week_changed.emit(week_earned())
 
 
 func _reset_today() -> void:

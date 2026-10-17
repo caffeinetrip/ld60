@@ -5,6 +5,7 @@ const PLAYED := [
 	&"day/start", &"day/end", &"night/start", &"bar/pour", &"bar/coin", &"relic/get",
 	&"boss/enter", &"game/win", &"hit/start", &"hit/perfect", &"hit/good", &"hit/meh",
 	&"hit/miss", &"ui/click", &"ui/buy", &"ui/error", &"music/day", &"music/night",
+	&"relic/pick", &"relic/drop", &"relic/rotate", &"relic/star",
 ]
 
 

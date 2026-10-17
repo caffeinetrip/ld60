@@ -22,7 +22,7 @@ func specials_today() -> int:
 	for row in SPECIALS:
 		if p >= row[0]:
 			n = row[1]
-	return roundi(n * (1.0 + Game.bonus(&"special_mult")))
+	return roundi(n * (1.0 + Game.mod(&"special_mult")))
 
 
 ## Which cats of the day (by arrival order) are special.
@@ -57,4 +57,4 @@ func beats_due() -> Array[Dictionary]:
 
 
 func boss_due() -> bool:
-	return Game.week_earned() >= Game.QUOTA
+	return Game.week_earned() >= Tune.QUOTA

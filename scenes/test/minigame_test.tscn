@@ -1,10 +1,10 @@
 [gd_scene load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://scripts/day/hit_bar_test.gd" id="1_test"]
+[ext_resource type="Script" path="res://scenes/test/minigame_test.gd" id="1_test"]
 [ext_resource type="PackedScene" path="res://scenes/cafe.tscn" id="2_cafe"]
-[ext_resource type="Script" path="res://scripts/day/hit_bar.gd" id="3_bar"]
+[ext_resource type="Script" path="res://scripts/minigames/minigames.gd" id="3_games"]
 
-[node name="HitBarTest" type="Node2D"]
+[node name="MiniGameTest" type="Node2D"]
 script = ExtResource("1_test")
 
 [node name="Cafe" parent="." instance=ExtResource("2_cafe")]
@@ -18,17 +18,17 @@ layer = 20
 [node name="Info" type="Label" parent="UI"]
 offset_left = 4.0
 offset_top = 2.0
-offset_right = 160.0
+offset_right = 200.0
 offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.95, 0.9, 0.79, 1)
 theme_override_colors/font_outline_color = Color(0.1, 0.07, 0.12, 1)
 theme_override_constants/outline_size = 2
 
-[node name="HitBar" type="Control" parent="UI"]
+[node name="MiniGames" type="Control" parent="UI"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("3_bar")
+script = ExtResource("3_games")

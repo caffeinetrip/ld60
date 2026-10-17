@@ -11,7 +11,7 @@ func test_specials_grow_with_progress() -> void:
 	eq(Game.director.specials_today(), 2, "25 %")
 	_progress(1125)
 	eq(Game.director.specials_today(), 3, "75 %")
-	Game.set_bonuses({special_mult = 1.0})
+	Game.set_mods(&"test", {special_mult = 1.0})
 	eq(Game.director.specials_today(), 6, "relic doubles")
 
 

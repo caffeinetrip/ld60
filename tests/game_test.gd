@@ -51,7 +51,7 @@ func test_ideal_follows_ingredients() -> void:
 			Game.selected[A] = a
 			Game.selected[F] = f
 			var sum: int = Game.ideal().values().reduce(func(t, v): return t + v)
-			check(sum <= Game.BASE_CAPACITY, "%s + %s fits a plain glass" % [a, f])
+			check(sum <= Tune.BASE_CAPACITY, "%s + %s fits a plain glass" % [a, f])
 
 
 func test_unlock() -> void:
@@ -79,7 +79,7 @@ func test_recipe_limits() -> void:
 	eq(Game.capacity(), 6, "tall glasses")
 	check(Game.set_recipe(A, 3), "3+2 fits")
 	check(Game.set_recipe(M, 3), "3+3 fits in 6")
-	Game.set_bonuses({capacity = 1.0})
+	Game.set_mods(&"test", {capacity = 1.0})
 	eq(Game.capacity(), 7, "relic capacity")
 
 
@@ -141,7 +141,7 @@ func test_rescue() -> void:
 	check(not Game.rescue(), "$5 buys a drink")
 	Game.money = 4
 	check(Game.rescue(), "broke")
-	eq(Game.drinks_possible(), Game.RESCUE, "guide's drinks")
+	eq(Game.drinks_possible(), Tune.RESCUE, "guide's drinks")
 	eq(Game.money, 4, "free")
 	check(not Game.rescue(), "once is enough")
 
@@ -157,7 +157,7 @@ func test_strands() -> void:
 
 
 func test_discount() -> void:
-	Game.set_bonuses({discount = 0.5})
+	Game.set_mods(&"test", {discount = 0.5})
 	eq(Game.unit_cost(&"brandy"), 1, "brandy")
 	eq(Game.unit_cost(&"absinthe"), 3, "absinthe")
 	eq(Game.unit_cost(&"ginger_ale"), 1, "never free")
@@ -194,7 +194,7 @@ func test_fair_price_and_demand() -> void:
 	near(Game.fair_price(), 9.2, "good name")
 	Game.set_recipe(F, 1)
 	near(Game.fair_price(), 11.5, "flavor adds value")
-	Game.set_bonuses({fair_mult = 1.0})
+	Game.set_mods(&"test", {fair_mult = 1.0})
 	near(Game.fair_price(), 23.0, "relic")
 
 
@@ -217,7 +217,7 @@ func test_sell() -> void:
 	eq(Game.today.spilled, 1, "spilled")
 	eq(Game.today.sold, 2, "spill isn't a sale")
 	eq(Game.stock[&"brandy"], 5, "spill still costs the drink")
-	Game.set_bonuses({price_mult = 0.2, tip_mult = 1.0})
+	Game.set_mods(&"test", {price_mult = 0.2, tip_mult = 1.0})
 	eq(Game.sell_next().money, 22, "relics: $12 + $10 tip")
 
 
@@ -290,29 +290,42 @@ func test_week_is_seven_days() -> void:
 	near(Game.quota_progress(), 1.0, "progress caps")
 
 
-func test_hit_params() -> void:
-	var p := Game.hit_params()
-	near(p.speed, 120.0, "slow at start")
-	near(p.good_zone, 0.4, "wide at start")
-	near(p.perfect_zone, 0.12, "perfect at start")
-	eq(p.flip, false, "no flip at start")
-	Game.earnings.assign([1500])
-	p = Game.hit_params()
-	near(p.speed, 240.0, "fast at quota")
-	near(p.good_zone, 0.22, "narrow at quota")
-	near(p.perfect_zone, 0.05, "perfect at quota")
-	Game.set_bonuses({hit_slow = 0.9, hit_zone = 5.0})
-	p = Game.hit_params()
-	near(p.speed, 72.0, "slow relic floors at x0.3")
-	near(p.good_zone, 0.9, "good caps")
-	near(p.perfect_zone, 0.3, "perfect x6")
-
-
 func test_relic_rolls() -> void:
 	var won := record(Game.relic_won)
 	eq(Game.grant_relic(&"miss"), &"", "miss")
 	eq(Game.grant_relic(&"meh"), &"", "meh")
 	for i in 20:
-		check(Game.grant_relic(&"perfect") in [&"epic", &"rare"], "perfect rarity")
-		check(Game.grant_relic(&"good") in [&"rare", &"common"], "good rarity")
+		check(Relics.get_def(Game.grant_relic(&"perfect")).rarity in [&"epic", &"rare"], "perfect rarity")
+		check(Relics.get_def(Game.grant_relic(&"good")).rarity in [&"rare", &"common"], "good rarity")
 	eq(won.size(), 40, "relic_won")
+	eq(Game.backpack.pocket.size(), 40, "all in the pocket")
+
+
+func test_mods_sum_sources() -> void:
+	Game.set_mods(&"a", {tip_mult = 0.1, capacity = 1})
+	Game.set_mods(&"b", {tip_mult = 0.2})
+	near(Game.mod(&"tip_mult"), 0.3, "summed")
+	eq(Game.capacity(), 6, "capacity")
+	Game.set_mods(&"a", {})
+	near(Game.mod(&"tip_mult"), 0.2, "source replaced")
+	eq(Game.capacity(), 5, "capacity back")
+	Game.money = 1000
+	Game.buy_upgrade(&"storage")
+	Game.buy_upgrade(&"storage")
+	eq(Game.storage(), 35, "upgrades are a source too")
+	Game.new_run()
+	near(Game.mod(&"tip_mult"), 0.0, "new run clears mods")
+
+
+func test_procs_and_reward() -> void:
+	Relics.custom[&"test_dice"] = {name = "Dice", rarity = &"common", tags = [], shape = [Vector2i.ZERO],
+		stars = [], mods = {}, proc = {event = &"serve", chance = 1.0, game = &"hit_bar", reward = {money = 10}}}
+	eq(Game.procs(&"serve").size(), 0, "in the pocket it does nothing")
+	Game.backpack.place(&"test_dice", Vector2i.ZERO, 0)
+	eq(Game.procs(&"serve").size(), 1, "placed")
+	eq(Game.procs(&"day_start").size(), 0, "other event")
+	Game.start_day()
+	eq(Game.reward(Game.procs(&"serve")[0].reward, 0.5), 5, "half quality, half money")
+	eq(Game.money, 125, "paid")
+	eq(Game.today.revenue, 5, "counts as revenue")
+	Relics.custom.erase(&"test_dice")

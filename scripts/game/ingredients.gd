@@ -4,11 +4,13 @@ class_name Ingredients
 ## `unlock` = price to open it in the shop grid, 0 = open from the start.
 ## The right drink is the same as in a real bar: `dose` = units of the thing itself,
 ## an alcohol's `mix` = units of mixer it wants (strong ones get more, light ones less).
+## Optional `proc` = a minigame hook while it's on sale, same format as in Relics.
 
 enum Kind { ALCOHOL, MIXER, FLAVOR }
 
 const KINDS := [Kind.ALCOHOL, Kind.MIXER, Kind.FLAVOR]
 const KIND_NAMES := ["Alcohol", "Mixer", "Flavor"]
+const KIND_NEED := ["a kick", "something to mix", "some flavor"]	# "Needs ..." when missing
 
 const DEFS := {
 	&"brandy": {name = "Brandy", kind = Kind.ALCOHOL, cost = 2, value = 6, dose = 1, mix = 2, unlock = 0, color = Color("b5651d")},

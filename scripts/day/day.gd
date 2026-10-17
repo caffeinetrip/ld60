@@ -1,20 +1,17 @@
 extends Node
 ## Runs one working day. Cats arrive by demand, the cat at the counter gets a drink,
-## special cats get the hit bar while the day stands still. Without a Customers node
-## it falls back to a timer stand-in, so the loop is playable before the cats exist.
+## special cats get a minigame while the day stands still; relics and ingredients with
+## a `proc` can pop one on their event too. Without a Customers node it falls back to a
+## timer stand-in, so the loop is playable before the cats exist.
 
 signal finished(report: Dictionary)
 
-const ARRIVAL := 1.0			# seconds between cats at full demand
-const MAX_DAY := 30.0
-const NOBODY_GIVES_UP := 5.0
 const SIM_WALK := 2.0
-const BOSS_HP := 100
 
 enum { HAPPY, SAD, ANGRY }		# same order as Cat.Mood
 
 @export var customers_path: NodePath
-@export var hit_bar_path: NodePath
+@export var minigames_path: NodePath
 @export var counter := Vector2(205, 124)
 
 var running := false
@@ -22,7 +19,7 @@ var time := 0.0
 var order := 0.0				# 0..1, the drink being made right now
 
 var _customers: Node
-var _hit_bar: HitBar
+var _games: MiniGames
 var _rng := RandomNumberGenerator.new()
 var _spawn_in := 0.0
 var _spawned := 0
@@ -35,7 +32,7 @@ var _sim_line: Array[StringName] = []
 
 func _ready() -> void:
 	_customers = get_node_or_null(customers_path)
-	_hit_bar = get_node(hit_bar_path)
+	_games = get_node(minigames_path)
 	if _customers:
 		_customers.at_counter.connect(_on_at_counter)
 	_rng.randomize()
@@ -54,6 +51,7 @@ func start() -> void:
 	_specials = Game.director.special_slots(Game.drinks_left(), _rng)
 	running = true
 	Feel.play(&"day/start")
+	_fire(&"day_start")
 
 
 func _process(delta: float) -> void:
@@ -67,7 +65,7 @@ func _process(delta: float) -> void:
 
 
 func _spawn_tick(delta: float) -> void:
-	if time >= MAX_DAY:
+	if time >= Tune.MAX_DAY:
 		return
 	if _spawned - _served >= Game.drinks_left():
 		return
@@ -76,7 +74,7 @@ func _spawn_tick(delta: float) -> void:
 	_spawn_in -= delta
 	if _spawn_in > 0.0:
 		return
-	_spawn_in = ARRIVAL * _rng.randf_range(0.7, 1.3)
+	_spawn_in = Tune.ARRIVAL * _rng.randf_range(1.0 - Tune.ARRIVAL_JITTER, 1.0 + Tune.ARRIVAL_JITTER)
 	# every passer-by looks at the price; the ones who don't come in only show up in the report
 	if _rng.randf() >= Game.demand():
 		Game.today.walked += 1
@@ -92,7 +90,7 @@ func _spawn_tick(delta: float) -> void:
 
 
 func open_time() -> float:
-	return clampf(time / MAX_DAY, 0.0, 1.0)
+	return clampf(time / Tune.MAX_DAY, 0.0, 1.0)
 
 
 ## Cats in line, the one being served included.
@@ -112,18 +110,15 @@ func _serve(kind: StringName, cat: Node) -> void:
 	var sale: Dictionary
 	var mood := HAPPY
 	if kind == &"special":
-		_frozen = true
-		var r: Dictionary = await _hit_bar.run(Game.hit_params())
+		var r: Dictionary = await _play(Tune.SPECIAL_GAME)
 		sale = Game.sell_next(0.0 if r.tier == &"miss" else r.quality)
-		if r.tier == &"perfect" or r.tier == &"good":
+		if Game.grant_relic(r.tier) != &"":
 			Game.today.specials_won += 1
-			Game.grant_relic(r.tier)
 			Feel.play(&"relic/get", counter)
 			Feel.text("New relic!", counter + Vector2(0, -12), Color("b497d6"))
 		else:
 			Game.today.specials_lost += 1
 			mood = SAD
-		_frozen = false
 	else:
 		Feel.play(&"bar/pour", counter)
 		order = 0.0
@@ -132,11 +127,10 @@ func _serve(kind: StringName, cat: Node) -> void:
 		sale = Game.sell_next()
 		mood = HAPPY if sale.score >= 0.7 else (SAD if sale.score >= 0.35 else ANGRY)
 
-	if sale.money > 0:
-		Feel.play(&"bar/coin", counter)
-		Feel.text("+$%d" % sale.money, counter, Color("ffd34d"))
+	_pay(sale.money)
 	if cat and sale.line != "":
 		cat.say(sale.line)
+	await _fire(&"serve")
 	_served += 1
 	if cat:
 		_customers.release_front(mood)
@@ -145,14 +139,37 @@ func _serve(kind: StringName, cat: Node) -> void:
 	_serving = false
 
 
+## Plays the minigame of every proc on `event` that rolls its chance, pays its reward.
+func _fire(event: StringName) -> void:
+	for p in Game.procs(event):
+		if _rng.randf() >= p.get("chance", 1.0):
+			continue
+		var r: Dictionary = await _play(p.get("game", Tune.SPECIAL_GAME))
+		_pay(Game.reward(p.get("reward", {}), r.quality))
+
+
+## A minigame with the day frozen.
+func _play(id: StringName, params := {}) -> Dictionary:
+	_frozen = true
+	var r: Dictionary = await _games.play(id, params)
+	_frozen = false
+	return r
+
+
+func _pay(cash: int) -> void:
+	if cash > 0:
+		Feel.play(&"bar/coin", counter)
+		Feel.text("+$%d" % cash, counter, Color("ffd34d"))
+
+
 func _check_end() -> void:
 	if _serving:
 		return
 	if Game.drinks_left() == 0:
 		_end(&"stock")
-	elif time >= MAX_DAY and _spawned == _served:
+	elif time >= Tune.MAX_DAY and _spawned == _served:
 		_end(&"time")
-	elif Game.demand() <= 0.0 and time >= NOBODY_GIVES_UP:
+	elif Game.demand() <= 0.0 and time >= Tune.NOBODY_GIVES_UP:
 		_end(&"nobody")
 
 
@@ -164,20 +181,18 @@ func _end(reason: StringName) -> void:
 	finished.emit(Game.end_day(reason))
 
 
-## The quota is met: one big cat, bar after bar until it's satisfied. Can't be lost.
+## The quota is met: one big cat, minigame after minigame until it's satisfied. Can't be lost yet.
 func boss_fight() -> void:
 	if _customers:
 		_customers.spawn(&"boss")
 		await _customers.at_counter
 	Feel.play(&"boss/enter", counter)
-	var hp := BOSS_HP
+	var hp := Tune.BOSS_HP
 	var round_i := 0
 	while hp > 0:
-		var p := Game.hit_params()
-		p.speed *= 1.0 + round_i * 0.08
-		p.flip = round_i % 2 == 1
-		var r: Dictionary = await _hit_bar.run(p)
-		var dmg := roundi(r.quality * 35.0)
+		var r: Dictionary = await _games.play(Tune.SPECIAL_GAME, {
+			pace = 1.0 + round_i * Tune.BOSS_SPEEDUP, flip = round_i % 2 == 1})
+		var dmg := roundi(r.quality * Tune.BOSS_DAMAGE)
 		hp -= dmg
 		Feel.text("-%d" % dmg if dmg > 0 else "MISS", counter + Vector2(0, -20), Color("e05a5a"))
 		round_i += 1

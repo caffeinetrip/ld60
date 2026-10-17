@@ -27,7 +27,7 @@ func _start(params: Dictionary) -> void:
 ## Clicks once the cursor passes `x`, then waits for the bar to close.
 func _hit_at(x: float, params := {speed = 60.0}) -> void:
 	_start(params)
-	check(await wait_for(func(): return bar._running and bar._x >= x, 10.0), "cursor reached %d" % x)
+	check(await wait_for(func(): return bar.running and bar._x >= x, 10.0), "cursor reached %d" % x)
 	click(AT)
 	check(await wait_for(func(): return not result.is_empty(), 5.0), "bar closed")
 
@@ -63,7 +63,7 @@ func test_meh() -> void:
 
 func test_flip_runs_backwards() -> void:
 	_start({speed = 60.0, flip = true})
-	await wait_for(func(): return bar._running, 2.0)
+	await wait_for(func(): return bar.running, 2.0)
 	var x := bar._x
 	await frames(5)
 	check(bar._x < x, "moves left")
@@ -79,3 +79,44 @@ func test_click_before_start_is_ignored() -> void:
 	check(result.is_empty(), "preroll click did nothing")
 	await wait_for(func(): return not result.is_empty(), 5.0)
 	eq(result.get("tier"), &"miss", "still runs out")
+
+
+func test_curve() -> void:
+	bar._setup({})
+	near(bar.speed, 120.0, "slow at start")
+	near(bar.good_zone, 0.4, "wide at start")
+	near(bar.perfect_zone, 0.12, "perfect at start")
+	eq(bar._dir, 1, "no flip at start")
+	bar.difficulty = 1.0
+	bar._setup({})
+	near(bar.speed, 240.0, "fast at the top")
+	near(bar.good_zone, 0.22, "narrow at the top")
+	near(bar.perfect_zone, 0.05, "perfect at the top")
+	bar.pace = 0.3
+	bar.zone = 6.0
+	bar._setup({})
+	near(bar.speed, 72.0, "pace")
+	near(bar.good_zone, 0.9, "good caps")
+	near(bar.perfect_zone, 0.3, "perfect x6")
+	bar._setup({speed = 10.0, flip = true})
+	near(bar.speed, 10.0, "own params win")
+	eq(bar._dir, -1, "flip")
+
+
+func test_host_applies_mods() -> void:
+	var games := MiniGames.new()
+	layer.add_child(games)
+	Game.earnings.assign([1500])
+	Game.set_mods(&"test", {hit_slow = 0.9, hit_zone = 5.0})
+	var got := {}
+	var play := func(): got.merge(await games.play(&"hit_bar", {pace = 2.0}))
+	play.call()
+	check(games.current is HitBar, "hit bar is up")
+	var hb: HitBar = games.current
+	near(hb.difficulty, 1.0, "run difficulty")
+	near(hb.pace, 0.6, "pace x slow mod, floored at 0.3")
+	near(hb.zone, 6.0, "zone mod")
+	near(hb.speed, 144.0, "240 x 0.6")
+	check(await wait_for(func(): return not got.is_empty(), 10.0), "ran out")
+	eq(got.get("tier"), &"miss", "no click")
+	check(games.current == null, "freed")
