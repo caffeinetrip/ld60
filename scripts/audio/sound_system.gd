@@ -1,8 +1,12 @@
 extends Node
 
-const POOL_SIZE := 12
+const POOL_SIZE := 32
+# spammy sounds keep to a few voices and are the first to give theirs away
+const LIMITS: Dictionary[StringName, int] = {&"cat/step": 3}
 const SETTINGS := "user://settings.cfg"
 const BUSES: Array[StringName] = [&"Master", &"Music", &"SFX"]
+# every sfx plays at a random pitch within +-this (music stays in tune)
+const PITCH_JITTER := 0.2
 
 var _rng := RandomNumberGenerator.new()
 var _players: Array[AudioStreamPlayer] = []
@@ -11,7 +15,9 @@ var _folders: Dictionary[StringName, PackedStringArray] = {}
 var _last: Dictionary[StringName, int] = {}
 var _streams: Dictionary[String, AudioStream] = {}
 var _warned: Dictionary[StringName, bool] = {}
-var _next := 0
+var _ids: Dictionary[AudioStreamPlayer, StringName] = {}
+var _ends: Dictionary[AudioStreamPlayer, int] = {}
+var _starts: Dictionary[AudioStreamPlayer, int] = {}
 var _music_slot := 0
 var _music_id: StringName = &""
 var _fade: Tween
@@ -47,20 +53,58 @@ func play(id: StringName, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	var stream := _pick(id, false)
 	if stream == null:
 		return
-	var player := _players[_next]
-	for candidate in _players:
-		if not candidate.playing:
-			player = candidate
-			break
-	_next = (_players.find(player) + 1) % POOL_SIZE
+	var player := _voice(id)
+	if player == null:
+		return
 	player.stop()
 	player.stream = stream
 	player.volume_db = volume_db - (20.0 if id == &"cat/step" else 0.0)
-	player.pitch_scale = maxf(0.01, pitch) * _rng.randf_range(0.95, 1.05)
+	player.pitch_scale = maxf(0.01, pitch) * _rng.randf_range(1.0 - PITCH_JITTER, 1.0 + PITCH_JITTER)
 	player.play()
+	var now := Time.get_ticks_msec()
+	_ids[player] = id
+	_starts[player] = now
+	_ends[player] = now + int(stream.get_length() / player.pitch_scale * 1000.0) + 50
 
 
-func music(id: StringName, fade: float = 1.0) -> void:
+# On web the samples play in the browser and `playing` can lag, so the end time is ours.
+func _busy(player: AudioStreamPlayer, now: int) -> bool:
+	return player.playing and _ends.get(player, 0) > now
+
+
+# A free player; else the same id's oldest one when it is over its limit;
+# else the oldest limited sound; else the sound closest to its end.
+func _voice(id: StringName) -> AudioStreamPlayer:
+	var now := Time.get_ticks_msec()
+	var limit: int = LIMITS.get(id, POOL_SIZE)
+	var same: Array[AudioStreamPlayer] = []
+	var free: AudioStreamPlayer
+	for player in _players:
+		if not _busy(player, now):
+			if free == null:
+				free = player
+		elif _ids.get(player) == id:
+			same.append(player)
+	if same.size() >= limit:
+		same.sort_custom(func(a, b): return _starts[a] < _starts[b])
+		return same[0]
+	if free != null:
+		return free
+	var best: AudioStreamPlayer
+	for player in _players:
+		if LIMITS.has(_ids.get(player, &"")) and (best == null or _starts[player] < _starts[best]):
+			best = player
+	if best != null:
+		return best
+	if id in LIMITS:
+		return null
+	for player in _players:
+		if best == null or _ends[player] < _ends[best]:
+			best = player
+	return best
+
+
+func music(id: StringName, fade: float = 1.0, quiet_intro: bool = false) -> void:
 	if id == _music_id:
 		return
 	var stream: AudioStream
@@ -87,8 +131,13 @@ func music(id: StringName, fade: float = 1.0) -> void:
 			player.volume_linear = target
 			if target == 0.0:
 				player.stop()
+		elif quiet_intro and player == incoming:
+			# Fade in perceived loudness, with a quiet first half and soft endpoints.
+			player.volume_db = -60.0
+			_fade.tween_property(player, "volume_db", -32.0, fade * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			_fade.tween_property(player, "volume_db", 0.0, fade * 0.5).from(-32.0).set_delay(fade * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		else:
-			_fade.tween_property(player, "volume_linear", target, fade)
+			_fade.tween_property(player, "volume_linear", target, minf(fade, 0.6) if quiet_intro else fade)
 	if fade <= 0.0:
 		_fade.kill()
 	else:
@@ -129,7 +178,9 @@ func _pick(id: StringName, looping: bool) -> AudioStream:
 	if not _folders.has(id):
 		var paths := PackedStringArray()
 		var folder := "res://audio/" + String(id)
-		if DirAccess.dir_exists_absolute(folder):
+		if folder.get_extension().to_lower() in ["wav", "ogg"] and ResourceLoader.exists(folder):
+			paths.append(folder)
+		elif DirAccess.dir_exists_absolute(folder):
 			for file in ResourceLoader.list_directory(folder):
 				if file.get_extension().to_lower() in ["wav", "ogg"]:
 					paths.append(folder.path_join(file))
@@ -137,7 +188,8 @@ func _pick(id: StringName, looping: bool) -> AudioStream:
 		_folders[id] = paths
 	var choices := _folders[id]
 	if choices.is_empty():
-		if not _warned.has(id):
+		# headless = tests and builds: a sound that isn't made yet is just silent there
+		if not _warned.has(id) and DisplayServer.get_name() != "headless":
 			push_warning("Sound: no audio files for '%s'" % id)
 			_warned[id] = true
 		return null

@@ -24,5 +24,7 @@
 *.mp3.import
 *.ttf.import
 *.otf.import
+*.aseprite
+SOURCE.txt
 /ui ref/
 /art/fonts/

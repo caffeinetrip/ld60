@@ -1,0 +1,22 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://b7hnq7estqjnm"]
+
+[ext_resource type="Shader" uid="uid://dnoly1r64r7ug" path="res://shaders/retro_screen.gdshader" id="1_shader"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/strength = 1.0
+shader_parameter/exposure = 1.02
+shader_parameter/midtone_gamma = 0.9
+shader_parameter/saturation = 1.06
+shader_parameter/warmth = 0.07
+shader_parameter/shadow_teal = 0.0
+shader_parameter/bloom = 0.0
+shader_parameter/bloom_threshold = 0.52
+shader_parameter/bloom_radius = 1.5
+shader_parameter/chromatic_aberration = 0.0
+shader_parameter/scanlines = 0.045
+shader_parameter/phosphor_mask = 0.02
+shader_parameter/grain = 0.012
+shader_parameter/grain_speed = 6.0
+shader_parameter/dither = 0.003
+shader_parameter/vignette = 0.07

@@ -1,0 +1,62 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/test/win_screen_demo.gd" id="1_demo"]
+[ext_resource type="PackedScene" path="res://scenes/cafe.tscn" id="2_cafe"]
+[ext_resource type="Script" path="res://scripts/ui/win_screen.gd" id="3_win"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_box"]
+bg_color = Color(0.168627, 0.113725, 0.180392, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.788235, 0.635294, 0.290196, 1)
+
+[node name="WinScreenTest" type="Node2D"]
+script = ExtResource("1_demo")
+
+[node name="Cafe" parent="." instance=ExtResource("2_cafe")]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(160, 90)
+
+[node name="UI" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="Info" type="Label" parent="UI"]
+offset_left = 4.0
+offset_top = 2.0
+offset_right = 200.0
+offset_bottom = 18.0
+theme_override_colors/font_color = Color(0.95, 0.9, 0.79, 1)
+theme_override_colors/font_outline_color = Color(0.1, 0.07, 0.12, 1)
+theme_override_constants/outline_size = 2
+
+[node name="WinScreen" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_win")
+
+[node name="Dialogue" type="CanvasLayer" parent="."]
+layer = 50
+
+[node name="Box" type="Panel" parent="Dialogue"]
+offset_left = 8.0
+offset_top = 124.0
+offset_right = 312.0
+offset_bottom = 174.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_box")
+
+[node name="Label" type="Label" parent="Dialogue/Box"]
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 298.0
+offset_bottom = 46.0
+text = "(dialogue box stand-in)
+We did it! The whole street talks about us."
+theme_override_colors/font_color = Color(0.94902, 0.901961, 0.788235, 1)

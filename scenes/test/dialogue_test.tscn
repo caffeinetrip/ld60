@@ -1,0 +1,29 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/test/dialogue_demo.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/cafe.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/dialogue.tscn" id="3"]
+
+[node name="DialogueTest" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Cafe" parent="." instance=ExtResource("2")]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(160, 90)
+
+[node name="UI" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="Info" type="Label" parent="UI"]
+offset_left = 4.0
+offset_top = 2.0
+offset_right = 200.0
+offset_bottom = 20.0
+mouse_filter = 2
+text = "click to talk"
+theme_override_colors/font_color = Color(0.95, 0.9, 0.79, 1)
+theme_override_colors/font_outline_color = Color(0.1, 0.07, 0.12, 1)
+theme_override_constants/outline_size = 2
+
+[node name="Dialogue" parent="." instance=ExtResource("3")]

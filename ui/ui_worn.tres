@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://cjxsc6wpnjyb5"]
+
+[ext_resource type="Shader" uid="uid://denlfxsci8tiw" path="res://shaders/ui_worn.gdshader" id="1_worn"]
+
+[resource]
+shader = ExtResource("1_worn")
+shader_parameter/cell = 2.0
+shader_parameter/grain = 0.03
+shader_parameter/blotch = 0.05
+shader_parameter/chips = 0.01
+shader_parameter/chip_dark = 0.6
+shader_parameter/saturation = 0.75
+shader_parameter/gain = 0.62

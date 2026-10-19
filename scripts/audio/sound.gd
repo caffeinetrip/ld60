@@ -8,10 +8,10 @@ static func play(id: StringName, volume_db: float = 0.0, pitch: float = 1.0) -> 
 		system.call(&"play", id, volume_db, pitch)
 
 
-static func music(id: StringName, fade: float = 1.0) -> void:
+static func music(id: StringName, fade: float = 1.0, quiet_intro: bool = false) -> void:
 	var system := _system()
 	if system != null:
-		system.call(&"music", id, fade)
+		system.call(&"music", id, fade, quiet_intro)
 
 
 static func set_bus_volume(bus: StringName, linear: float) -> void:

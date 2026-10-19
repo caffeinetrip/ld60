@@ -2,10 +2,10 @@
 extends Node
 ## Light of the cafe. One source - the windows - and one lit place - the bar: three soft
 ## window patches across the counter, the stools and the floor where customers order.
-## Everything else gets a weak fill that dies into black.
+## A restrained warm-neutral fill reveals furniture beneath pale, nearly white windows.
 ##
-## night: 0 = cozy day (warm sun, warm glass), 1 = creepy night (cold moon, dark glass,
-## a much darker room). Drag it in the inspector or call set_night(). Every value of both
+## night: 0 = muted warm daylight, 1 = deeper blue-grey night.
+## Drag it in the inspector or call set_night(). Every value of both
 ## moods is exported, so a mood is retuned here without touching the scene.
 
 @export_range(0.0, 1.0, 0.01) var night := 0.0:
@@ -14,36 +14,36 @@ extends Node
 		_apply()
 
 @export_group("Day")
-@export var day_ambient := Color(0.3, 0.27, 0.26)
-@export var day_fill := Color(1.0, 0.85, 0.7)
-@export var day_fill_energy := 0.5
-@export var day_sun := Color(1.0, 0.82, 0.58)
-@export var day_sun_energy := 2.0
-@export var day_glass := Color(1.0, 0.92, 0.76)
-@export var day_glass_energy := 1.3
-@export var day_haze := Color(1.0, 0.84, 0.62, 0.16)
-@export var day_door := Color(1.0, 0.92, 0.78)
+@export var day_ambient := Color(0.44, 0.425, 0.40)
+@export var day_fill := Color(0.98, 0.92, 0.83)
+@export var day_fill_energy := 0.78
+@export var day_sun := Color(1.0, 0.94, 0.84)
+@export var day_sun_energy := 1.35
+@export var day_glass := Color(1.0, 0.97, 0.90)
+@export var day_glass_energy := 1.6
+@export var day_haze := Color(0.96, 0.90, 0.80, 0.025)
+@export var day_door := Color(1.0, 0.94, 0.85)
 @export var day_door_energy := 1.2
-@export var day_saturation := 0.92
-@export var day_vignette := 0.55
-@export var day_shadow_tint := Color(0.52, 0.49, 0.47)
-@export var day_highlight_tint := Color(0.56, 0.52, 0.45)
+@export var day_saturation := 1.10
+@export var day_vignette := 0.28
+@export var day_shadow_tint := Color(0.49, 0.50, 0.515)
+@export var day_highlight_tint := Color(0.53, 0.515, 0.49)
 
 @export_group("Night")
-@export var night_ambient := Color(0.08, 0.085, 0.12)
-@export var night_fill := Color(0.55, 0.62, 0.85)
-@export var night_fill_energy := 0.22
-@export var night_sun := Color(0.52, 0.66, 1.0)
-@export var night_sun_energy := 1.2
-@export var night_glass := Color(0.32, 0.42, 0.6)
+@export var night_ambient := Color(0.20, 0.225, 0.25)
+@export var night_fill := Color(0.88, 0.84, 0.77)
+@export var night_fill_energy := 0.44
+@export var night_sun := Color(0.62, 0.73, 0.76)
+@export var night_sun_energy := 1.1
+@export var night_glass := Color(0.50, 0.62, 0.64)
 @export var night_glass_energy := 0.9
-@export var night_haze := Color(0.5, 0.62, 0.9, 0.08)
+@export var night_haze := Color(0.52, 0.63, 0.66, 0.035)
 @export var night_door := Color(0.45, 0.55, 0.8)
 @export var night_door_energy := 0.6
-@export var night_saturation := 0.6
-@export var night_vignette := 0.75
-@export var night_shadow_tint := Color(0.47, 0.49, 0.54)
-@export var night_highlight_tint := Color(0.47, 0.5, 0.55)
+@export var night_saturation := 0.96
+@export var night_vignette := 0.44
+@export var night_shadow_tint := Color(0.49, 0.50, 0.515)
+@export var night_highlight_tint := Color(0.515, 0.51, 0.495)
 
 @export_group("Nodes")
 @export var ambient: CanvasModulate
@@ -88,6 +88,7 @@ func _apply() -> void:
 			m.set_shader_parameter("energy", lerpf(day_glass_energy, night_glass_energy, t))
 	var g := grade.material as ShaderMaterial if grade else null
 	if g:
+		g.set_shader_parameter("night_shadow_grain", t * 0.012)
 		g.set_shader_parameter("saturation", lerpf(day_saturation, night_saturation, t))
 		g.set_shader_parameter("vignette", lerpf(day_vignette, night_vignette, t))
 		g.set_shader_parameter("shadow_tint", day_shadow_tint.lerp(night_shadow_tint, t))

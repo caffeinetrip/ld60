@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://csxtjgcmamakb"]
+
+[ext_resource type="Shader" uid="uid://4o3sm5cjyvsm" path="res://shaders/cat_fur.gdshader" id="1_character"]
+
+[resource]
+shader = ExtResource("1_character")
+shader_parameter/direct_light_strength = 0.85
+shader_parameter/ambient_boost = 1.5
+shader_parameter/midtone_gamma = 1.0

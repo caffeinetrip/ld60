@@ -1,71 +1,121 @@
 extends Control
+## Bottom right: sound (volume plate) and game speed (1x -> 2x -> 3x, shown as 1-3 arrows).
+## Worn brass rings, brighter when hovered or active.
 
 const SoundAPI = preload("res://scripts/audio/sound.gd")
+const SPEEDS := [1.0, 2.0, 3.0]
+const SPEED_ICONS := [preload("res://art/ui/hud/speed_1.png"), preload("res://art/ui/hud/speed_2.png"), preload("res://art/ui/hud/speed_3.png")]
+const SOUND_ICON := preload("res://art/ui/hud/sound.png")
+const RING := preload("res://art/ui/hud/ring.png")
+const TRACK := preload("res://art/ui/hud/run/slider_track.png")
+const FILL := preload("res://art/ui/hud/run/slider_fill.png")
+const HOVER := preload("res://art/ui/hud/run/slider_hover.png")
+const THUMB := preload("res://art/ui/hud/run/slider_thumb.png")
+const RIGHT := 624		# same 16 px inset as the timer
+const MIDDLE := 344
+const REST := Color("82755e")
 
-var _panel: Panel
+var _panel: Control
 var _music: HSlider
 var _sound: HSlider
+var _speed: Button
+var _sound_button: Button
 
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	mouse_filter = MOUSE_FILTER_IGNORE
-	var button := Button.new()
-	button.position = Vector2(-16, 2)
-	button.size = Vector2(14, 14)
-	button.focus_mode = Control.FOCUS_NONE
-	_style_button(button)
-	add_child(button)
-	button.draw.connect(_draw_icon.bind(button))
-	button.pressed.connect(_toggle)
-	_panel = Panel.new()
-	_panel.position = Vector2(-126, 18)
-	_panel.size = Vector2(124, 78)
-	_panel.add_theme_stylebox_override("panel", _style(Color("2b1d2e")))
+	material = HudStyle.run_material()
+	var ring := RING.get_size().x
+	_speed = _button(Vector2(RIGHT - ring, MIDDLE - floorf(ring / 2.0)), func() -> Texture2D: return SPEED_ICONS[SPEEDS.find(Feel.speed)],
+		func() -> bool: return Feel.speed > 1.0)
+	_speed.pressed.connect(_next_speed)
+	_sound_button = _button(Vector2(RIGHT - ring * 2 - 6, MIDDLE - floorf(ring / 2.0)), func() -> Texture2D: return SOUND_ICON,
+		func() -> bool: return _panel.visible)
+	_sound_button.pressed.connect(_toggle)
+
+	# volume, a small plate over the buttons
+	_panel = Control.new()
+	_panel.use_parent_material = true
+	_panel.size = Vector2(120, 38)
+	_panel.position = Vector2(RIGHT - _panel.size.x, MIDDLE - floorf(ring / 2.0) - 8 - _panel.size.y)
+	_panel.draw.connect(func() -> void:
+		HudStyle.plate(_panel, Rect2(Vector2.ZERO, _panel.size)))
 	_panel.hide()
 	add_child(_panel)
-	_music = _slider("Music", 5, &"Music")
-	_sound = _slider("Sound", 28, &"SFX")
-	var close := Button.new()
-	close.text = "Close"
-	close.position = Vector2(70, 54)
-	close.size = Vector2(48, 18)
-	close.focus_mode = Control.FOCUS_NONE
-	_style_button(close)
-	close.pressed.connect(_toggle)
-	_panel.add_child(close)
+	_music = _slider("MUSIC", 9, &"Music")
+	_sound = _slider("SOUND", 21, &"SFX")
+	preload("res://scripts/ui/appear.gd").attach(self)
+	preload("res://scripts/ui/appear.gd").attach(_panel)
+
+
+## A thin ring with an icon: dim at rest, light when hovered, held or `on`.
+func _button(at: Vector2, icon: Callable, on: Callable) -> Button:
+	var b := Button.new()
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.use_parent_material = true
+	b.position = at
+	b.size = RING.get_size()
+	b.draw.connect(func() -> void:
+		var tex: Texture2D = icon.call()
+		var lit: bool = on.call() or b.get_draw_mode() != BaseButton.DRAW_NORMAL
+		var push := 1 if b.get_draw_mode() == BaseButton.DRAW_PRESSED else 0
+		var col := HudStyle.RUN_BRIGHT if lit else REST
+		b.draw_texture(RING, Vector2.ZERO, col)
+		b.draw_texture(tex, ((b.size - tex.get_size()) / 2.0).floor() + Vector2(0, push), col))
+	add_child(b)
+	return b
+
+
+func set_intro_mode(enabled: bool) -> void:
+	var ring := RING.get_size().x
+	_speed.visible = not enabled
+	_sound_button.position = Vector2(RIGHT - ring, 16) if enabled else Vector2(RIGHT - ring * 2 - 6, MIDDLE - floorf(ring / 2.0))
+	_panel.position = Vector2(RIGHT - _panel.size.x, 16 + ring + 8) if enabled else Vector2(RIGHT - _panel.size.x, MIDDLE - floorf(ring / 2.0) - 8 - _panel.size.y)
+	_panel.hide()
+	_sound_button.queue_redraw()
 
 
 func _toggle() -> void:
 	_click()
 	_panel.visible = not _panel.visible
+	_sound_button.queue_redraw()
 	if _panel.visible:
 		_music.set_value_no_signal(SoundAPI.get_bus_volume(&"Music"))
 		_sound.set_value_no_signal(SoundAPI.get_bus_volume(&"SFX"))
 
 
+func _next_speed() -> void:
+	_click()
+	Feel.speed = SPEEDS[(SPEEDS.find(Feel.speed) + 1) % SPEEDS.size()]
+	_speed.queue_redraw()
+
+
 func _slider(title: String, top: int, bus: StringName) -> HSlider:
 	var label := Label.new()
 	label.text = title
-	label.position = Vector2(6, top)
-	label.add_theme_color_override("font_color", Color("f2e6c9"))
+	label.use_parent_material = true
+	label.position = Vector2(HudStyle.PAD + 1, top - 4)
+	label.add_theme_font_override("font", HudStyle.TALK_FONT)
+	label.add_theme_font_size_override("font_size", HudStyle.RUN_FONT_SIZE)
+	label.add_theme_color_override("font_color", HudStyle.RUN_TEXT)
 	_panel.add_child(label)
 	var slider := HSlider.new()
-	slider.position = Vector2(50, top + 4)
-	slider.size = Vector2(66, 12)
+	slider.use_parent_material = true
+	slider.position = Vector2(52, top)
+	slider.size = Vector2(_panel.size.x - 52 - HudStyle.PAD - 1, 6)
 	slider.min_value = 0.0
 	slider.max_value = 1.0
 	slider.step = 0.01
 	slider.focus_mode = Control.FOCUS_NONE
 	slider.value = SoundAPI.get_bus_volume(bus)
-	slider.add_theme_stylebox_override("slider", _style(Color("9c8a99")))
-	slider.add_theme_stylebox_override("grabber_area", _style(Color("c9a24a")))
-	slider.add_theme_stylebox_override("grabber_area_highlight", _style(Color("ffd34d")))
-	var image := Image.create(3, 8, false, Image.FORMAT_RGBA8)
-	image.fill(Color("ffd34d"))
-	var texture := ImageTexture.create_from_image(image)
+	slider.add_theme_stylebox_override("slider", _style(TRACK))
+	slider.add_theme_stylebox_override("grabber_area", _style(FILL))
+	slider.add_theme_stylebox_override("grabber_area_highlight", _style(HOVER))
 	for icon: StringName in [&"grabber", &"grabber_highlight", &"grabber_disabled"]:
-		slider.add_theme_icon_override(icon, texture)
+		slider.add_theme_icon_override(icon, THUMB)
 	slider.value_changed.connect(func(value: float) -> void: SoundAPI.set_bus_volume(bus, value))
 	slider.drag_started.connect(_click)
 	_panel.add_child(slider)
@@ -78,23 +128,9 @@ func _click() -> void:
 		feel.call(&"play", &"ui/click")
 
 
-func _draw_icon(button: Button) -> void:
-	for row in 3:
-		var y := float(4 + row * 3)
-		button.draw_line(Vector2(3, y), Vector2(10, y), Color("f2e6c9"))
-		button.draw_rect(Rect2(4 + (row % 2) * 4, y - 1, 1, 3), Color("ffd34d"))
-
-
-func _style(color: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.border_color = Color("c9a24a")
-	style.set_border_width_all(1)
+func _style(texture: Texture2D) -> StyleBoxTexture:
+	var style := StyleBoxTexture.new()
+	style.texture = texture
+	style.content_margin_top = 2
+	style.content_margin_bottom = 2
 	return style
-
-
-func _style_button(button: Button) -> void:
-	button.add_theme_stylebox_override("normal", _style(Color("2b1d2e")))
-	button.add_theme_stylebox_override("hover", _style(Color("493346")))
-	button.add_theme_stylebox_override("pressed", _style(Color("65454d")))
-	button.add_theme_color_override("font_color", Color("f2e6c9"))
